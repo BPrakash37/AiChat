@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TeamChat — Real-time Messaging</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    /* ── Reset & base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0f1117;
+      --surface:   #1a1d27;
+      --panel:     #21253a;
+      --border:    #2e334d;
+      --accent:    #5b7cf6;
+      --accent2:   #7c5bf6;
+      --text:      #e8eaf6;
+      --muted:     #7b82a8;
+      --bubble-me: #3d4fc8;
+      --bubble-them: #252942;
+      --online:    #3ecf8e;
+      --danger:    #ef4444;
+      --radius:    14px;
+      --font:      'Inter', system-ui, sans-serif;
+    }
+
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+    html, body { height: 100%; font-family: var(--font); background: var(--bg); color: var(--text); overflow: hidden; }
+
+    /* ── Login screen ── */
+    #login-screen {
+      position: fixed; inset: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: center;
+      background: radial-gradient(ellipse at 60% 30%, #1a1f4a 0%, var(--bg) 70%);
+    }
+    .login-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 48px 40px;
+      width: min(420px, 92vw);
+      text-align: center;
+      box-shadow: 0 32px 80px rgba(0,0,0,.6);
+    }
+    .login-logo {
+      width: 64px; height: 64px; border-radius: 18px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      display: grid; place-items: center; margin: 0 auto 24px;
+      font-size: 28px;
+    }
+    .login-card h1 { font-size: 24px; font-weight: 700; margin-bottom: 6px; }
+    .login-card p  { color: var(--muted); font-size: 14px; margin-bottom: 32px; }
+
+    .input-wrap { position: relative; margin-bottom: 16px; }
+    .input-wrap input {
+      width: 100%; padding: 14px 16px;
+      background: var(--panel); border: 1.5px solid var(--border);
+      border-radius: 12px; color: var(--text); font-size: 15px;
+      font-family: var(--font); outline: none; transition: border-color .2s;
+    }
+    .input-wrap input:focus { border-color: var(--accent); }
+    .input-wrap input::placeholder { color: var(--muted); }
+
+    .btn-primary {
+      width: 100%; padding: 14px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border: none; border-radius: 12px; color: #fff;
+      font-size: 15px; font-weight: 600; font-family: var(--font);
+      cursor: pointer; transition: opacity .2s, transform .1s;
+    }
+    .btn-primary:hover  { opacity: .9; }
+    .btn-primary:active { transform: scale(.98); }
+    .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+
+    .error-msg { color: var(--danger); font-size: 13px; margin-top: 10px; min-height: 18px; }
+
+    /* ── App layout ── */
+    #app { display: none; height: 100vh; display: grid; grid-template-columns: 260px 1fr; }
+    #app.visible { display: grid; }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+    .sidebar-header {
+      padding: 20px 16px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 12px;
+    }
+    .logo-mark {
+      width: 36px; height: 36px; border-radius: 10px; flex-shrink: 0;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      display: grid; place-items: center; font-size: 16px;
+    }
+    .sidebar-header h2 { font-size: 16px; font-weight: 700; }
+    .sidebar-header small { display: block; color: var(--muted); font-size: 11px; }
+
+    .room-info {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .room-info-label { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 8px; font-weight: 600; }
+    .room-chip {
+      display: inline-flex; align-items: center; gap: 7px;
+      background: rgba(91,124,246,.15); border: 1px solid rgba(91,124,246,.3);
+      border-radius: 8px; padding: 7px 12px; font-size: 13px; font-weight: 500; color: var(--accent);
+    }
+
+    .online-section { padding: 14px 16px; flex: 1; overflow-y: auto; }
+    .online-section::-webkit-scrollbar { width: 4px; }
+    .online-section::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    .section-label { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 10px; font-weight: 600; }
+
+    .user-chip {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 10px; border-radius: 10px; margin-bottom: 4px;
+      transition: background .15s;
+    }
+    .user-chip:hover { background: var(--panel); }
+    .avatar {
+      width: 32px; height: 32px; border-radius: 50%;
+      display: grid; place-items: center; font-size: 13px; font-weight: 700;
+      flex-shrink: 0; color: #fff;
+    }
+    .user-name { font-size: 13px; font-weight: 500; flex: 1; }
+    .online-dot {
+      width: 8px; height: 8px; border-radius: 50%; background: var(--online);
+      box-shadow: 0 0 6px var(--online);
+    }
+
+    .sidebar-footer {
+      padding: 14px 16px;
+      border-top: 1px solid var(--border);
+      display: flex; align-items: center; gap: 10px;
+    }
+    .me-avatar {
+      width: 36px; height: 36px; border-radius: 50%;
+      display: grid; place-items: center; font-size: 14px; font-weight: 700; flex-shrink: 0; color: #fff;
+    }
+    .me-info { flex: 1; min-width: 0; }
+    .me-info .me-name { font-size: 13px; font-weight: 600; }
+    .me-info .me-status { font-size: 11px; color: var(--online); }
+    .leave-btn {
+      width: 30px; height: 30px; border-radius: 8px;
+      background: transparent; border: 1px solid var(--border);
+      color: var(--muted); cursor: pointer; font-size: 14px;
+      display: grid; place-items: center; transition: all .2s;
+    }
+    .leave-btn:hover { background: var(--danger); border-color: var(--danger); color: #fff; }
+
+    /* ── Chat area ── */
+    .chat-area { display: flex; flex-direction: column; overflow: hidden; }
+
+    .chat-header {
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      display: flex; align-items: center; gap: 12px;
+    }
+    .chat-header-icon {
+      font-size: 20px; width: 40px; height: 40px; border-radius: 12px;
+      background: rgba(91,124,246,.15); display: grid; place-items: center;
+    }
+    .chat-header h3 { font-size: 16px; font-weight: 600; }
+    .chat-header small { display: block; color: var(--muted); font-size: 12px; margin-top: 1px; }
+    .header-right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+    .online-count {
+      background: rgba(62,207,142,.1); border: 1px solid rgba(62,207,142,.25);
+      color: var(--online); font-size: 12px; font-weight: 600;
+      padding: 4px 10px; border-radius: 20px;
+    }
+
+    /* ── Messages ── */
+    #messages-wrap {
+      flex: 1; overflow-y: auto; padding: 20px 24px;
+      display: flex; flex-direction: column; gap: 2px;
+    }
+    #messages-wrap::-webkit-scrollbar { width: 4px; }
+    #messages-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .day-divider {
+      text-align: center; margin: 16px 0 12px;
+      position: relative;
+    }
+    .day-divider::before {
+      content: ''; position: absolute; top: 50%; left: 0; right: 0;
+      height: 1px; background: var(--border);
+    }
+    .day-divider span {
+      position: relative; background: var(--bg);
+      padding: 0 12px; font-size: 11px; color: var(--muted); font-weight: 500;
+    }
+
+    .msg-group { display: flex; flex-direction: column; margin-bottom: 2px; }
+    .msg-group.mine  { align-items: flex-end; }
+    .msg-group.theirs { align-items: flex-start; }
+
+    .msg-sender {
+      font-size: 11px; color: var(--muted); font-weight: 600;
+      margin-bottom: 4px; padding: 0 4px;
+    }
+    .msg-group.mine .msg-sender { text-align: right; }
+
+    .bubble-row { display: flex; align-items: flex-end; gap: 8px; max-width: 70%; }
+    .msg-group.mine  .bubble-row { flex-direction: row-reverse; }
+
+    .bubble-avatar {
+      width: 28px; height: 28px; border-radius: 50%;
+      display: grid; place-items: center; font-size: 11px; font-weight: 700;
+      flex-shrink: 0; color: #fff; margin-bottom: 2px;
+    }
+    .msg-group.mine .bubble-avatar { display: none; }
+
+    .bubble {
+      padding: 10px 14px; border-radius: 18px;
+      font-size: 14px; line-height: 1.5; word-break: break-word;
+      position: relative;
+    }
+    .msg-group.theirs .bubble {
+      background: var(--bubble-them);
+      border-bottom-left-radius: 4px;
+    }
+    .msg-group.mine .bubble {
+      background: var(--bubble-me);
+      border-bottom-right-radius: 4px;
+      color: #fff;
+    }
+
+    .bubble .time {
+      display: block; font-size: 10px; color: rgba(255,255,255,.45);
+      text-align: right; margin-top: 4px;
+    }
+    .msg-group.theirs .bubble .time { color: var(--muted); }
+
+    /* consecutive bubbles in same group */
+    .msg-group.mine  .bubble-row + .bubble-row .bubble { border-bottom-right-radius: 18px; border-top-right-radius: 4px; }
+    .msg-group.theirs .bubble-row + .bubble-row .bubble { border-bottom-left-radius: 18px; border-top-left-radius: 4px; }
+
+    /* ── Typing indicator ── */
+    #typing-bar {
+      min-height: 28px; padding: 0 24px 4px;
+      font-size: 12px; color: var(--muted); font-style: italic;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .typing-dots span {
+      display: inline-block; width: 5px; height: 5px; border-radius: 50%;
+      background: var(--muted); animation: bounce .9s infinite;
+    }
+    .typing-dots span:nth-child(2) { animation-delay: .15s; }
+    .typing-dots span:nth-child(3) { animation-delay: .3s; }
+    @keyframes bounce {
+      0%,60%,100% { transform: translateY(0); }
+      30%          { transform: translateY(-5px); }
+    }
+
+    /* ── Input bar ── */
+    .input-bar {
+      padding: 16px 24px;
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+      display: flex; align-items: flex-end; gap: 12px;
+    }
+    .msg-input-wrap {
+      flex: 1; position: relative;
+    }
+    #msg-input {
+      width: 100%; min-height: 44px; max-height: 140px;
+      background: var(--panel); border: 1.5px solid var(--border);
+      border-radius: 22px; padding: 11px 18px;
+      color: var(--text); font-size: 14px; font-family: var(--font);
+      outline: none; resize: none; line-height: 1.5;
+      transition: border-color .2s; overflow-y: auto;
+    }
+    #msg-input:focus { border-color: var(--accent); }
+    #msg-input::placeholder { color: var(--muted); }
+    #msg-input::-webkit-scrollbar { width: 3px; }
+    #msg-input::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    #send-btn {
+      width: 44px; height: 44px; border-radius: 50%; flex-shrink: 0;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border: none; color: #fff; cursor: pointer;
+      display: grid; place-items: center; font-size: 18px;
+      transition: opacity .2s, transform .15s;
+    }
+    #send-btn:hover  { opacity: .9; }
+    #send-btn:active { transform: scale(.93); }
+    #send-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+    /* ── Empty state ── */
+    .empty-state {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 12px; color: var(--muted);
+    }
+    .empty-state .icon { font-size: 48px; opacity: .4; }
+    .empty-state p { font-size: 14px; }
+
+    /* ── Setup notice ── */
+    #setup-notice {
+      position: fixed; inset: 0; z-index: 200;
+      background: rgba(0,0,0,.85); backdrop-filter: blur(6px);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .setup-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 20px; padding: 40px; width: min(560px, 94vw);
+    }
+    .setup-card h2 { font-size: 20px; margin-bottom: 8px; }
+    .setup-card p  { color: var(--muted); font-size: 14px; line-height: 1.6; margin-bottom: 16px; }
+    .code-block {
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 10px; padding: 16px; font-family: monospace;
+      font-size: 13px; color: #a5b4fc; margin-bottom: 12px;
+      white-space: pre-wrap; word-break: break-all;
+    }
+    .setup-card .btn-primary { margin-top: 8px; }
+
+    /* ── Responsive ── */
+    @media (max-width: 640px) {
+      #app.visible { grid-template-columns: 1fr; }
+      .sidebar { display: none; }
+      .sidebar.open { display: flex; position: fixed; inset: 0; z-index: 50; width: 280px; }
+      .chat-header { padding: 12px 16px; }
+      #messages-wrap { padding: 14px 12px; }
+      .input-bar { padding: 12px 16px; }
+      #typing-bar { padding: 0 16px 4px; }
+      .bubble-row { max-width: 86%; }
+      .mobile-menu-btn { display: grid !important; }
+    }
+    .mobile-menu-btn {
+      display: none; width: 34px; height: 34px; border-radius: 8px;
+      background: var(--panel); border: 1px solid var(--border);
+      color: var(--text); cursor: pointer; place-items: center; font-size: 16px;
+    }
+    .sidebar-overlay {
+      display: none; position: fixed; inset: 0; z-index: 49; background: rgba(0,0,0,.5);
+    }
+    .sidebar-overlay.active { display: block; }
+  </style>
+</head>
+<body>
+
+<!-- ── SETUP NOTICE (shown if Supabase not configured) ── -->
+<div id="setup-notice" style="display:none;">
+  <div class="setup-card">
+    <h2>⚙️ One-time Setup Required</h2>
+    <p>To use TeamChat, you need a free <strong>Supabase</strong> account. Follow these steps:</p>
+    <p><strong>1.</strong> Go to <a href="https://supabase.com" target="_blank" style="color:var(--accent)">supabase.com</a> → Create a new project (free)</p>
+    <p><strong>2.</strong> Go to <strong>SQL Editor</strong> and run this schema:</p>
+    <div class="code-block" id="schema-sql"></div>
+    <p><strong>3.</strong> Go to <strong>Project Settings → API</strong> and copy your <strong>URL</strong> and <strong>anon key</strong></p>
+    <p><strong>4.</strong> Edit <code style="color:var(--accent)">config.js</code> and paste your credentials</p>
+    <button class="btn-primary" onclick="document.getElementById('setup-notice').style.display='none'">I've done this — Dismiss</button>
+  </div>
+</div>
+
+<!-- ── LOGIN ── -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">💬</div>
+    <h1>TeamChat</h1>
+    <p>Real-time messaging for your team</p>
+    <div class="input-wrap">
+      <input type="text" id="username-input" placeholder="Choose a username" maxlength="20" autocomplete="off" />
+    </div>
+    <div class="input-wrap">
+      <input type="text" id="room-input" placeholder="Room name (e.g. general)" maxlength="30" autocomplete="off" />
+    </div>
+    <button class="btn-primary" id="join-btn">Join Room →</button>
+    <p class="error-msg" id="login-error"></p>
+  </div>
+</div>
+
+<!-- ── MAIN APP ── -->
+<div id="app">
+  <!-- Sidebar overlay for mobile -->
+  <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="logo-mark">💬</div>
+      <div>
+        <h2>TeamChat</h2>
+        <small>Secure · Private · Fast</small>
+      </div>
+    </div>
+    <div class="room-info">
+      <div class="room-info-label">Current room</div>
+      <div class="room-chip">
+        <span>#</span>
+        <span id="room-name-display">general</span>
+      </div>
+    </div>
+    <div class="online-section">
+      <div class="section-label">Online now</div>
+      <div id="online-users-list"></div>
+    </div>
+    <div class="sidebar-footer">
+      <div class="me-avatar" id="me-avatar-sidebar"></div>
+      <div class="me-info">
+        <div class="me-name" id="me-name-sidebar"></div>
+        <div class="me-status">● Online</div>
+      </div>
+      <button class="leave-btn" title="Leave room" onclick="leaveRoom()">✕</button>
+    </div>
+  </aside>
+
+  <!-- Chat area -->
+  <main class="chat-area">
+    <div class="chat-header">
+      <button class="mobile-menu-btn" onclick="openSidebar()">☰</button>
+      <div class="chat-header-icon">#</div>
+      <div>
+        <h3 id="chat-room-title">general</h3>
+        <small id="chat-subtitle">Team room</small>
+      </div>
+      <div class="header-right">
+        <div class="online-count"><span id="online-count">0</span> online</div>
+      </div>
+    </div>
+
+    <div id="messages-wrap">
+      <div class="empty-state" id="empty-state">
+        <div class="icon">💬</div>
+        <p>No messages yet — say hello!</p>
+      </div>
+    </div>
+
+    <div id="typing-bar"></div>
+
+    <div class="input-bar">
+      <div class="msg-input-wrap">
+        <textarea id="msg-input" placeholder="Type a message…" rows="1"></textarea>
+      </div>
+      <button id="send-btn" title="Send">➤</button>
+    </div>
+  </main>
+</div>
+
+<!-- Load config then app -->
+<script src="config.js"></script>
+<script>
+// ─── Color palette for avatars ───
+const COLORS = ['#5b7cf6','#7c5bf6','#f65b8a','#f6a05b','#3ecf8e','#5bc4f6','#f65b5b','#a05bf6'];
+function colorFor(name) {
+  let h = 0; for (const c of name) h = (h * 31 + c.charCodeAt(0)) & 0xffff;
+  return COLORS[h % COLORS.length];
+}
+function initials(name) { return name.slice(0,2).toUpperCase(); }
+function makeAvatar(name, size=32) {
+  const d = document.createElement('div');
+  d.className = 'avatar';
+  d.style.cssText = `width:${size}px;height:${size}px;background:${colorFor(name)};font-size:${Math.floor(size*0.4)}px`;
+  d.textContent = initials(name);
+  return d;
+}
+
+// ─── State ───
+let supabase, currentUser = null, currentRoom = null;
+let channel = null, presenceChannel = null;
+let typingTimeout = null, isTyping = false;
+let typingUsers = {};
+let lastMsgDate = null, lastMsgUser = null;
+let messageGroups = {}; // groupKey -> DOM element
+
+// ─── Init Supabase ───
+function initSupabase() {
+  if (typeof SUPABASE_URL === 'undefined' || SUPABASE_URL === 'YOUR_SUPABASE_URL') {
+    document.getElementById('schema-sql').textContent = SQL_SCHEMA;
+    document.getElementById('setup-notice').style.display = 'flex';
+    return false;
+  }
+  supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  return true;
+}
+
+const SQL_SCHEMA = `-- Run this in Supabase SQL Editor
+create table if not exists messages (
+  id          uuid primary key default gen_random_uuid(),
+  room        text not null,
+  username    text not null,
+  content     text not null,
+  created_at  timestamptz default now()
+);
+
+-- Index for fast room queries
+create index if not exists messages_room_idx on messages(room, created_at);
+
+-- Enable Row Level Security
+alter table messages enable row level security;
+
+-- Allow anyone to read and insert (no auth required)
+create policy "read messages"   on messages for select using (true);
+create policy "insert messages" on messages for insert with check (true);
+
+-- Enable Realtime
+alter publication supabase_realtime add table messages;`;
+
+// ─── Login ───
+document.getElementById('join-btn').addEventListener('click', joinRoom);
+document.getElementById('username-input').addEventListener('keydown', e => { if (e.key === 'Enter') joinRoom(); });
+document.getElementById('room-input').addEventListener('keydown', e => { if (e.key === 'Enter') joinRoom(); });
+
+async function joinRoom() {
+  const username = document.getElementById('username-input').value.trim();
+  const room     = document.getElementById('room-input').value.trim() || 'general';
+  const errEl    = document.getElementById('login-error');
+  errEl.textContent = '';
+
+  if (!username) { errEl.textContent = 'Please enter a username.'; return; }
+  if (username.length < 2) { errEl.textContent = 'Username must be at least 2 characters.'; return; }
+  if (!/^[a-zA-Z0-9_\- ]+$/.test(username)) { errEl.textContent = 'Only letters, numbers, spaces, _ and - allowed.'; return; }
+
+  const btn = document.getElementById('join-btn');
+  btn.disabled = true; btn.textContent = 'Joining…';
+
+  if (!initSupabase()) { btn.disabled = false; btn.textContent = 'Join Room →'; return; }
+
+  currentUser = username;
+  currentRoom = room.toLowerCase().replace(/[^a-z0-9\-_]/g,'') || 'general';
+
+  // Show app
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').classList.add('visible');
+  document.getElementById('room-name-display').textContent = currentRoom;
+  document.getElementById('chat-room-title').textContent = '#' + currentRoom;
+  document.getElementById('chat-subtitle').textContent = 'Team room · Text only';
+  document.getElementById('me-name-sidebar').textContent = username;
+  const sideAvatar = document.getElementById('me-avatar-sidebar');
+  sideAvatar.style.background = colorFor(username);
+  sideAvatar.textContent = initials(username);
+
+  await loadHistory();
+  subscribeRealtime();
+  setupPresence();
+  setupInput();
+
+  btn.disabled = false; btn.textContent = 'Join Room →';
+}
+
+// ─── Load history ───
+async function loadHistory() {
+  const { data, error } = await supabase
+    .from('messages')
+    .select('*')
+    .eq('room', currentRoom)
+    .order('created_at', { ascending: true })
+    .limit(200);
+
+  if (error) { console.error('History error:', error); return; }
+  if (data && data.length > 0) {
+    document.getElementById('empty-state')?.remove();
+    data.forEach(msg => renderMessage(msg, false));
+    scrollToBottom(false);
+  }
+}
+
+// ─── Realtime subscription ───
+function subscribeRealtime() {
+  channel = supabase
+    .channel('room-' + currentRoom)
+    .on('postgres_changes', {
+      event: 'INSERT', schema: 'public', table: 'messages',
+      filter: `room=eq.${currentRoom}`
+    }, payload => {
+      document.getElementById('empty-state')?.remove();
+      const isMe = payload.new.username === currentUser;
+      renderMessage(payload.new, true);
+      if (isMe || isNearBottom()) scrollToBottom(true);
+    })
+    .subscribe();
+}
+
+// ─── Presence ───
+function setupPresence() {
+  presenceChannel = supabase.channel('presence-' + currentRoom, {
+    config: { presence: { key: currentUser } }
+  });
+
+  presenceChannel
+    .on('presence', { event: 'sync' }, () => {
+      const state = presenceChannel.presenceState();
+      const users = Object.keys(state).map(k => state[k][0]?.username || k);
+      renderOnlineUsers(users);
+    })
+    .on('broadcast', { event: 'typing' }, ({ payload }) => {
+      if (payload.username === currentUser) return;
+      typingUsers[payload.username] = payload.typing;
+      if (!payload.typing) delete typingUsers[payload.username];
+      renderTyping();
+      if (payload.typing) {
+        clearTimeout(typingUsers['__timer_' + payload.username]);
+        typingUsers['__timer_' + payload.username] = setTimeout(() => {
+          delete typingUsers[payload.username];
+          renderTyping();
+        }, 4000);
+      }
+    })
+    .subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        await presenceChannel.track({ username: currentUser, joined_at: Date.now() });
+      }
+    });
+}
+
+function renderOnlineUsers(users) {
+  const list = document.getElementById('online-users-list');
+  list.innerHTML = '';
+  const unique = [...new Set(users)].sort();
+  unique.forEach(u => {
+    const chip = document.createElement('div');
+    chip.className = 'user-chip';
+    const av = makeAvatar(u, 32);
+    const name = document.createElement('span');
+    name.className = 'user-name';
+    name.textContent = u + (u === currentUser ? ' (you)' : '');
+    const dot = document.createElement('div');
+    dot.className = 'online-dot';
+    chip.append(av, name, dot);
+    list.appendChild(chip);
+  });
+  document.getElementById('online-count').textContent = unique.length;
+}
+
+function renderTyping() {
+  const bar = document.getElementById('typing-bar');
+  const names = Object.keys(typingUsers).filter(k => !k.startsWith('__timer_'));
+  if (names.length === 0) { bar.innerHTML = ''; return; }
+  const who = names.length === 1 ? names[0]
+    : names.length === 2 ? names.join(' and ')
+    : names.slice(0,-1).join(', ') + ' and ' + names.at(-1);
+  bar.innerHTML = `
+    <div class="typing-dots"><span></span><span></span><span></span></div>
+    <span>${escHtml(who)} ${names.length===1?'is':'are'} typing…</span>`;
+}
+
+// ─── Message rendering ───
+function renderMessage(msg, animate = false) {
+  const wrap = document.getElementById('messages-wrap');
+  const isMe = msg.username === currentUser;
+  const msgDate = new Date(msg.created_at);
+  const dateStr = formatDate(msgDate);
+
+  // Day divider
+  if (dateStr !== lastMsgDate) {
+    const div = document.createElement('div');
+    div.className = 'day-divider';
+    div.innerHTML = `<span>${dateStr}</span>`;
+    wrap.appendChild(div);
+    lastMsgDate = dateStr;
+    lastMsgUser = null; // reset grouping on new day
+  }
+
+  // Grouping: consecutive messages from same user
+  const groupKey = `${msg.username}__${dateStr}__${Math.floor(new Date(msg.created_at).getTime()/60000/5)}`; // 5-min window
+  let group = null;
+
+  if (lastMsgUser === msg.username && messageGroups[groupKey]) {
+    group = messageGroups[groupKey];
+  } else {
+    group = document.createElement('div');
+    group.className = 'msg-group ' + (isMe ? 'mine' : 'theirs');
+
+    if (!isMe) {
+      const sender = document.createElement('div');
+      sender.className = 'msg-sender';
+      sender.textContent = msg.username;
+      group.appendChild(sender);
+    }
+
+    messageGroups[groupKey] = group;
+    wrap.appendChild(group);
+  }
+
+  lastMsgUser = msg.username;
+
+  // Bubble row
+  const row = document.createElement('div');
+  row.className = 'bubble-row';
+  if (animate) row.style.animation = 'none'; // just appear
+
+  if (!isMe) {
+    const av = document.createElement('div');
+    av.className = 'bubble-avatar';
+    av.style.background = colorFor(msg.username);
+    av.textContent = initials(msg.username);
+    row.appendChild(av);
+  }
+
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  bubble.innerHTML = `${escHtml(msg.content)}<span class="time">${formatTime(msgDate)}</span>`;
+  row.appendChild(bubble);
+  group.appendChild(row);
+}
+
+// ─── Input & send ───
+function setupInput() {
+  const input = document.getElementById('msg-input');
+  const sendBtn = document.getElementById('send-btn');
+
+  input.focus();
+
+  input.addEventListener('input', () => {
+    // Auto-grow
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 140) + 'px';
+    // Typing indicator
+    if (!isTyping) {
+      isTyping = true;
+      presenceChannel.send({ type: 'broadcast', event: 'typing', payload: { username: currentUser, typing: true } });
+    }
+    clearTimeout(typingTimeout);
+    typingTimeout = setTimeout(() => {
+      isTyping = false;
+      presenceChannel.send({ type: 'broadcast', event: 'typing', payload: { username: currentUser, typing: false } });
+    }, 2000);
+  });
+
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  });
+
+  sendBtn.addEventListener('click', sendMessage);
+}
+
+async function sendMessage() {
+  const input = document.getElementById('msg-input');
+  const content = input.value.trim();
+  if (!content) return;
+
+  // Clear typing
+  clearTimeout(typingTimeout);
+  isTyping = false;
+  presenceChannel.send({ type: 'broadcast', event: 'typing', payload: { username: currentUser, typing: false } });
+
+  input.value = '';
+  input.style.height = 'auto';
+
+  const { error } = await supabase.from('messages').insert({
+    room: currentRoom, username: currentUser, content
+  });
+  if (error) {
+    console.error('Send error:', error);
+    // Restore message if failed
+    input.value = content;
+  }
+}
+
+// ─── Leave room ───
+function leaveRoom() {
+  if (!confirm('Leave this room?')) return;
+  if (presenceChannel) presenceChannel.untrack();
+  if (channel) supabase.removeChannel(channel);
+  if (presenceChannel) supabase.removeChannel(presenceChannel);
+  currentUser = null; currentRoom = null;
+  lastMsgDate = null; lastMsgUser = null;
+  messageGroups = {};
+  document.getElementById('messages-wrap').innerHTML = `
+    <div class="empty-state" id="empty-state">
+      <div class="icon">💬</div><p>No messages yet — say hello!</p>
+    </div>`;
+  document.getElementById('online-users-list').innerHTML = '';
+  document.getElementById('typing-bar').innerHTML = '';
+  document.getElementById('app').classList.remove('visible');
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('username-input').value = '';
+  document.getElementById('login-error').textContent = '';
+}
+
+// ─── Mobile sidebar ───
+function openSidebar() {
+  document.getElementById('sidebar').classList.add('open');
+  document.getElementById('sidebar-overlay').classList.add('active');
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-overlay').classList.remove('active');
+}
+
+// ─── Helpers ───
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+          .replace(/"/g,'&quot;').replace(/\n/g,'<br>');
+}
+function formatTime(d) {
+  return d.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
+}
+function formatDate(d) {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today); yesterday.setDate(today.getDate()-1);
+  const msgDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  if (+msgDay === +today) return 'Today';
+  if (+msgDay === +yesterday) return 'Yesterday';
+  return d.toLocaleDateString([], { weekday:'long', month:'long', day:'numeric' });
+}
+function scrollToBottom(smooth=true) {
+  const w = document.getElementById('messages-wrap');
+  w.scrollTo({ top: w.scrollHeight, behavior: smooth ? 'smooth' : 'instant' });
+}
+function isNearBottom() {
+  const w = document.getElementById('messages-wrap');
+  return w.scrollHeight - w.scrollTop - w.clientHeight < 120;
+}
+</script>
+</body>
+</html>
