@@ -1,0 +1,85 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html, body, #root {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #0f0f14;
+    color: #e2e8f0;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.12);
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255,255,255,0.2);
+  }
+}
+
+@layer components {
+  .chat-bubble-mine {
+    @apply bg-brand-600 text-white rounded-2xl rounded-br-sm px-4 py-2 max-w-xs lg:max-w-md;
+  }
+  .chat-bubble-other {
+    @apply bg-slate-700 text-slate-100 rounded-2xl rounded-bl-sm px-4 py-2 max-w-xs lg:max-w-md;
+  }
+  .sidebar-item {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-150
+           hover:bg-white/5 active:bg-white/10;
+  }
+  .sidebar-item-active {
+    @apply bg-brand-600/20 hover:bg-brand-600/25;
+  }
+  .input-field {
+    @apply w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-slate-200
+           placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent
+           transition-all duration-150;
+  }
+  .btn-primary {
+    @apply bg-brand-600 hover:bg-brand-500 active:bg-brand-700 text-white font-semibold
+           px-5 py-2.5 rounded-xl transition-all duration-150 disabled:opacity-50
+           disabled:cursor-not-allowed flex items-center justify-center gap-2;
+  }
+  .btn-ghost {
+    @apply bg-white/5 hover:bg-white/10 active:bg-white/15 text-slate-300
+           px-4 py-2 rounded-xl transition-all duration-150 flex items-center gap-2;
+  }
+  .btn-danger {
+    @apply bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-xl
+           transition-all duration-150 flex items-center gap-2;
+  }
+  .status-dot-online {
+    @apply w-2.5 h-2.5 bg-emerald-400 rounded-full border-2 border-slate-900;
+  }
+  .status-dot-offline {
+    @apply w-2.5 h-2.5 bg-slate-500 rounded-full border-2 border-slate-900;
+  }
+  .glass-panel {
+    @apply bg-white/[0.04] backdrop-blur-sm border border-white/[0.08] rounded-2xl;
+  }
+  .typing-dot {
+    @apply w-2 h-2 bg-slate-400 rounded-full;
+    animation: pulseDot 1.4s ease-in-out infinite;
+  }
+  .typing-dot:nth-child(1) { animation-delay: 0s; }
+  .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+  .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+}
