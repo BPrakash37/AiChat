@@ -65,22 +65,47 @@ export const useAuthStore = create((set, get) => ({
   },
 
   register: async (username, password, displayName) => {
-    const email = `${username}@chatspaceapp.com`
-    const { data, error } = await supabase.auth.signUp({ email, password })
-    if (error) throw error
+  const email = `${username}@chatspaceapp.com`
 
-    // Create profile
-    const { error: profileError } = await supabase.from('profiles').insert({
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+  })
+
+  if (error) throw error
+
+  const { error: profileError } = await supabase
+    .from('profiles')
+    .insert({
       id: data.user.id,
       username,
       display_name: displayName || username,
       status: username === SUPER_ADMIN_USERNAME ? 'active' : 'pending',
       role: username === SUPER_ADMIN_USERNAME ? 'admin' : 'user',
     })
-    if (profileError) throw profileError
 
-    return data
-  },
+  if (profileError) throw profileError
+
+  // Skip notification for the super admin
+  if (username !== SUPER_ADMIN_USERNAME) {
+    const { error: notifyError } = await supabase.functions.invoke(
+      'notify-registration',
+      {
+        body: {
+          userId: data.user.id,
+          username,
+          displayName: displayName || username,
+        },
+      }
+    )
+
+    if (notifyError) {
+      console.error('Telegram notification failed:', notifyError)
+    }
+  }
+
+  return data
+},
 
   logout: async () => {
     const { profile } = get()
